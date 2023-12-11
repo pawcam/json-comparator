@@ -83,6 +83,7 @@ def combine_mqp_files(mqp_files, router, date)
       out_file.puts(line)
     end
   end
+  out_file.close
 end
 
 def diff_json_file_name(router, date)
@@ -133,6 +134,10 @@ combine_mqp_files(mqp_files, router_name, date)
 mqp_lines = IO.readlines(combined_mqp_file_name(router_name, date))
 orm_lines = IO.readlines(File.join(ORM_LOG_FILE_PATH, orm_file)).select { |line| line.include? ORM_LOG_JSON_TAG }
 
+# log some stats
+log(router_name, "mqp lines read from #{combined_mqp_file_name(router_name, date)}: #{mqp_lines.count}")
+log(router_name, "orm lines read from #{File.join(ORM_LOG_FILE_PATH, orm_file)}: #{orm_lines.count}")
+
 # Extract the JSON payload from each log file
 mqp_lines.each do |line|
   File.write(mqp_json_file_name(router_name, date), line.partition('"payload":"')[2].partition('","routing_key')[0].gsub('\\', '') + "\n")
@@ -148,6 +153,9 @@ system("diff #{mqp_json_file_name(router_name, date)} #{orm_json_file_name(route
 mqp_file_json = []
 File.read(diff_json_file_name(router_name, date)).each_line do |line|
   next unless line.include?(DIFF_LHS_TAG)
+  text_to_parse = line.partition(DIFF_LHS_TAG)[2].strip
+  next if text_to_parse.empty?
+
   json = JSON.parse(line.partition(DIFF_LHS_TAG)[2].strip)
   mqp_file_json << json if json
 end
@@ -156,12 +164,14 @@ end
 orm_file_json = []
 File.read(diff_json_file_name(router_name, date)).each_line do |line|
   next unless line.include?(DIFF_RHS_TAG)
+  text_to_parse = line.partition(DIFF_RHS_TAG)[2].strip
+  next if text_to_parse.empty?
+
   json = JSON.parse(line.partition(DIFF_RHS_TAG)[2].strip)
   orm_file_json << json if json
 end
 
 # compare file1 and file2 json objects
-
 mqp_file_json.each_with_index do |json, index|
   log(router_name, "JSON Message Index #{index}---------------------")
   json.map do |k, v|
