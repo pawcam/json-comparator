@@ -1,14 +1,22 @@
+require 'fileutils'
+
+DEPLOYER_HOME = '/home/deployer'.freeze
 DIFF_LHS_TAG = '<'.freeze
 DIFF_RHS_TAG = '>'.freeze
 
-COMPARISON_BASE_DIR = '/home/deployer/scripts/logs'.freeze
+COMPARISON_BASE_DIR = "#{DEPLOYER_HOME}/scripts/logs".freeze
 COMPARISON_OUTPUT_LOG = "#{COMPARISON_BASE_DIR}/mqp-json-comparator.log".freeze
 
 ORM_LOG_JSON_TAG = 'JSON|'.freeze
 ORM_LOG_NAME_DATE_REGEX = /^(?<router_name>\w+)_order-router-monitor_(?<trade_date>\d{8})_0\.log$/.freeze
 ORM_LOG_FILE_PATH = '/home/deployer/logs'.freeze
 
-MQP_FILE_REGEX = /mq_recorder\w+\d+_(?<date>[0-9]{8})\S*\.{1}log$/.freeze
+MQP_FILE_REGEX = /^(?<router>mq_recorder_\w+)-twMQProducer_(?<date>\d{8})_(?<process_id>\d+)_0\.log$/.freeze
+
+def log(message)
+  puts "#{Time.now} - #{message}"
+  File.write(COMPARISON_OUTPUT_LOG, "#{Time.now} - #{message}\n", mode: 'a')
+end
 
 def orm_file_regex_match(file_name)
   ORM_LOG_NAME_DATE_REGEX.match(file_name)
@@ -23,7 +31,7 @@ def orm_file_matches_date_and_router?(file_name, date, router)
   match = orm_file_regex_match(file_name)
   return false unless match
 
-  Date.parse(match[:date]).eql? date && match[:router_name].eql?(router)
+  match[:date].eql? date && match[:router_name].eql?(router)
 end
 
 def mq_file_regex_match(file_name)
@@ -34,23 +42,28 @@ def mqp_file_matches_name_and_date?(file_name, date)
   match = mq_file_regex_match(file_name)
   return false unless match
 
-  Date.parse(match[:date]).eql? date
+  log("#{date} matched mqp file: #{file_name}")
+  match[:date].eql? date
 end
 
 def mqp_file_date(file_name)
   match = mq_file_regex_match(file_name)
   return nil unless match
 
-  Date.parse(match[:date])
+  match[:date]
 end
 
 def mqp_log_files(router)
-  Dir["home/deployer/#{router}/mq-producer/logs"].sort_by { |f| File.mtime(f) }
+  log_files = Dir[File.join(DEPLOYER_HOME, router, 'mq-producer', 'logs', "*mq_recorder_#{router}*.log")].sort_by { |f| File.mtime(f) }
+  log("ALL mqp log files: #{log_files}")
+
+  log_files
 end
 
 def comparison_prefix(router, date)
   "#{router}_#{date}"
 end
+
 def combined_mqp_file_name(router, date)
   "#{COMPARISON_BASE_DIR}/#{comparison_prefix(router, date)}-combined-mqp-logs"
 end
@@ -77,26 +90,32 @@ def orm_json_file_name(router, date)
   "#{COMPARISON_BASE_DIR}/#{comparison_prefix(router, date)}-orm-json"
 end
 
-## Script Begin
+
+## Script Begin ##
 if ARGV.length < 1
-  puts 'Usage: mqp-json-comparison.rb <router_name>'
+  puts 'Usage: mqp_json_comparison.rb <router_name>'
   exit
 end
 router_name = ARGV[0]
 
+# Create the output directory if it doesn't exist
+FileUtils.mkdir_p(COMPARISON_BASE_DIR) unless Dir.exist?(COMPARISON_BASE_DIR)
+
 # Grab the trade date from the latest mqp log file
 dates = mqp_log_files(router_name).map { |file| mqp_file_date(file) }
-date = date.compact.last
+log("Dates found for mqp files: #{dates}")
+date = dates.compact.last
+log("Selecting date: #{date} for comparison")
 
 # Now grab all mqp and orm files that match on the date and router name
-mqp_files = mqp_log_files.select { |file| mqp_file_matches_name_and_date?(file, date) }
+mqp_files = mqp_log_files(router_name).select { |file| mqp_file_matches_name_and_date?(file, date) }
 orm_files = orm_log_files.select { |file| orm_file_matches_date_and_router?(file, date, router_name) }
 exit if mqp_files.empty? || orm_files.empty?
 
 # grab the latest orm file. This script assumes there will only be one file that matches the date and router name
 orm_file = orm_files.last
 if orm_file.nil?
-  File.write(COMPARISON_OUTPUT_LOG, "No orm file found for #{router_name} on #{date}, exiting")
+  log("No orm file found for #{router_name} on #{date}, exiting")
   exit
 end
 
