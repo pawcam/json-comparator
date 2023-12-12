@@ -24,23 +24,23 @@ for dir in "$search_dir"/*; do
 
     # If the directory contains all subdirs, print its name
     if [ "$contains_all_subdirs" = true ]; then
-	ROUTER="$(basename "$dir")"
-	echo "$ROUTER"
+      ROUTER="$(basename "$dir")"
+      echo "$ROUTER"
   
-	# Look for an existing crontab entry with the pattern "start $(ROUTER)-mq-producer.service"
-  	cron_start_schedule=$(crontab -l | grep "start $ROUTER-mq-producer.service" | awk '{print $1, $2, $3, $4, $5}')
+      # Look for an existing crontab entry with the pattern "start $(ROUTER)-mq-producer.service"
+      cron_start_schedule=$(crontab -l | grep "start $ROUTER-mq-producer.service" | awk '{print $1, $2, $3, $4, $5}')
 
-	# Add a new cron job with the extracted schedule
- 	(crontab -l; echo "$cron_start_schedule /home/deployer/order-router-monitor -mode poll -OR $ROUTER &") | crontab -
+      # Add a new cron job with the extracted schedule
+      (crontab -l; echo "$cron_start_schedule /home/deployer/order-router-monitor -mode poll -OR $ROUTER &") | crontab -
 
-	# Look for an existing crontab entry with the pattern "stop $ROUTER-mq-producer.service"
-	stop_cron_schedule=$(crontab -l | grep "stop $ROUTER-mq-producer.service" | awk '{print $1, $2, $3, $4, $5}')
+      # Look for an existing crontab entry with the pattern "stop $ROUTER-mq-producer.service"
+      stop_cron_schedule=$(crontab -l | grep "stop $ROUTER-mq-producer.service" | awk '{print $1, $2, $3, $4, $5}')
 
-	# Add a new cron job with the extracted schedule to stop the process
-	(crontab -l; echo "$stop_cron_schedule /usr/bin/pkill -f '/home/deployer/order-router-monitor -mode poll -OR $ROUTER'") | crontab -
+      # Add a new cron job with the extracted schedule to stop the process
+      (crontab -l; echo "$stop_cron_schedule /usr/bin/pkill -f '/home/deployer/order-router-monitor -mode poll -OR $ROUTER'") | crontab -
 
-        # Add a new cron job with the same schedule to run the ruby script
-        (crontab -l; echo "$stop_cron_schedule /usr/local/rvm/bin/rvm 2.7.6 do ruby /home/deployer/scripts/mqp_json_comparison.rb $ROUTER") | crontab -
+      # Add a new cron job with the same schedule to run the ruby script
+      (crontab -l; echo "$stop_cron_schedule /usr/local/rvm/bin/rvm 2.7.6 do ruby /home/deployer/scripts/mqp_json_comparison.rb $ROUTER") | crontab -
     fi
   fi
 done
