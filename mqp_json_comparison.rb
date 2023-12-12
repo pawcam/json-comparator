@@ -147,7 +147,8 @@ orm_lines.each do |line|
 end
 
 # Run linux Diff
-system("diff #{mqp_json_file_name(router_name, date)} #{orm_json_file_name(router_name, date)} > #{diff_json_file_name(router_name, date)}")
+result = system("diff #{mqp_json_file_name(router_name, date)} #{orm_json_file_name(router_name, date)} > #{diff_json_file_name(router_name, date)}")
+log(router, 'JSON is equal, exiting') if result
 
 # iterate over file1's json and build an array of json objects
 mqp_file_json = []
