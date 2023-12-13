@@ -9,7 +9,7 @@ COMPARISON_LOG_BASE_DIR = "#{DEPLOYER_HOME}/scripts/logs".freeze
 COMPARISON_LOG_SUFFIX = '-mqp-json-comparator.log'.freeze
 
 ORM_LOG_JSON_TAG = 'JSON|'.freeze
-ORM_LOG_NAME_DATE_REGEX = /^(?<router_name>\w+)_order-router-monitor_(?<date>\d{8})_0\.log$/.freeze
+ORM_LOG_NAME_DATE_REGEX = /^(?<router_name>\w+)-order-router-monitor_(?<date>\d{8})_0\.log$/.freeze
 ORM_LOG_FILE_PATH = File.join(DEPLOYER_HOME, 'logs').freeze
 
 MQP_FILE_REGEX = /^(?<router>mq_recorder_\w+)-twMQProducer_(?<date>\d{8})_(?<process_id>\d+)_0\.log$/.freeze
