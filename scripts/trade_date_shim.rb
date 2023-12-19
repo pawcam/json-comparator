@@ -19,7 +19,6 @@ OptionParser.new do |opts|
 
   router_name = opts.default_argv[0]
   fail 'router name must not be nil' if router_name.nil?
-  puts router_name
 end.parse!
 
 if router_name.include?('CBOE_DIGITAL')
