@@ -18,7 +18,7 @@ fi
 
 # Get the log files
 # TODO we should move these logs into their own directory in deployer
-log_files=$(ls -t /home/deployer/logs/"$order_router"-order-router-monitor_*.log 2> /dev/null)
+log_files=$(ls -t /home/deployer/logs/recorder_"$order_router"-order-router-monitor_*.log 2> /dev/null)
 
 # Check if any log files were found
 if [ -z "$log_files" ]; then
