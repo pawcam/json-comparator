@@ -41,7 +41,7 @@ for dir in "$search_dir"/*; do
 
       if [ "$is_holiday_aware" = true ]; then
         # Use the new command for holiday aware routers
-        TRADE_DATE=$(/usr/local/rvm/bin/rvm 2.5.1 do ruby trade_date_shim.rb $ROUTER | tail -n 1); /home/deployer/order-router-monitor -mode poll -OR $ROUTER -trade_date $TRADE_DATE &
+        TRADE_DATE=$(/usr/local/rvm/bin/rvm 2.5.1 do ruby /home/deployer/scripts/trade_date_shim.rb $ROUTER | tail -n 1); /home/deployer/order-router-monitor -mode poll -OR $ROUTER -trade_date $TRADE_DATE &
       else
         # Use the existing command for other routers
         /home/deployer/order-router-monitor -mode poll -OR $ROUTER &

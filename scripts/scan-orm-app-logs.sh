@@ -12,7 +12,7 @@ search_strings=$3
 
 # Check if the number is a positive integer
 if ! [[ "$number" =~ ^[0-9]+$ ]]; then
-    echo "Error: The first argument must be a positive integer."
+    echo "Error: The second argument must be a positive integer."
     exit 1
 fi
 
