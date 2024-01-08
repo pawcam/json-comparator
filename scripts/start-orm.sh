@@ -7,6 +7,12 @@ search_dir="/home/deployer"
 subdirs=("order-router" "new-order-service" "cancel-order-service" "mq-producer")
 holiday_aware_routers=("CBOE_DIGITAL" "CFE" "CME" "CRYPTOCURRENCY")
 
+# Save the current directory
+original_dir=$(pwd)
+
+# Change to the home directory
+cd ~
+
 # Iterate over all directories in the search directory
 for dir in "$search_dir"/*; do
   # Check if the item is a directory
@@ -49,3 +55,6 @@ for dir in "$search_dir"/*; do
     fi
   fi
 done
+
+# Return to the original directory
+cd "$original_dir"
