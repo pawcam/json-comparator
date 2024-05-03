@@ -9,7 +9,7 @@ COMPARISON_LOG_BASE_DIR = "#{DEPLOYER_HOME}/scripts/logs".freeze
 COMPARISON_LOG_SUFFIX = '-mqp-json-comparator.log'.freeze
 
 ORM_LOG_JSON_TAG = 'JSON|'.freeze
-ORM_LOG_NAME_DATE_REGEX = /^(?<router_name>\w+)-order-router-monitor_(?<date>\d{8})_0\.log$/.freeze
+ORM_LOG_NAME_DATE_REGEX = /^recorder_(?<router>\w+)-order-router-monitor_(?<date>\d{8})_(?<process_id>\d+)_0\.log$/.freeze
 ORM_LOG_FILE_PATH = File.join(DEPLOYER_HOME, 'logs').freeze
 
 MQP_FILE_REGEX = /^(?<router>mq_recorder_\w+)-twMQProducer_(?<date>\d{8})_(?<process_id>\d+)_0\.log$/.freeze
@@ -24,7 +24,7 @@ def orm_file_regex_match(file_name)
 end
 
 def orm_log_files(router)
-  log_files = Dir[File.join(ORM_LOG_FILE_PATH, "#{router}*")].sort_by { |f| File.mtime(f) }
+  log_files = Dir[File.join(ORM_LOG_FILE_PATH, "recorder_#{router}*")].sort_by { |f| File.mtime(f) }
   log(router, "orm log files: #{log_files}")
 
   log_files.map { |file| File.basename(file) }
@@ -36,6 +36,10 @@ def orm_file_matches_date?(file_name, date)
   return false unless match
 
   match[:date].eql? date
+end
+
+def combined_orm_file_name(router, date)
+  "#{COMPARISON_LOG_BASE_DIR}/#{comparison_prefix(router, date)}-combined-orm-logs"
 end
 
 def mqp_path_by_router(router)
@@ -86,7 +90,17 @@ def combine_mqp_files(mqp_files, router, date)
   out_file.close
 end
 
-def diff_json_file_name(router, date)
+def combine_orm_files(orm_files, router, date)
+  out_file = File.open(combined_orm_file_name(router, date), 'w')
+  orm_files.each do |file|
+    File.foreach(File.join(ORM_LOG_FILE_PATH, file)) do |line|
+      out_file.puts(line)
+    end
+  end
+  out_file.close
+end
+
+def diff_json_file_name(router, date).
   File.join(COMPARISON_LOG_BASE_DIR, "#{comparison_prefix(router, date)}-diff-json")
 end
 
@@ -101,54 +115,60 @@ end
 
 ## Script Begin ##
 if ARGV.length < 1
-  puts 'Usage: mqp_json_comparison.rb <router_name>'
+  puts 'Usage: mqp_json_comparison.rb <router_name> (optional) <date>'
   exit
 end
 router_name = ARGV[0]
+date = ARGV[1]
 
 # Create the output directory if it doesn't exist
 FileUtils.mkdir_p(COMPARISON_LOG_BASE_DIR) unless Dir.exist?(COMPARISON_LOG_BASE_DIR)
 
-# Grab the trade date from the latest mqp log file
-dates = mqp_log_files(router_name).map { |file| mqp_file_date(file) }
-log(router_name, "Dates found for mqp files: #{dates}")
-date = dates.compact.last
-log(router_name, "Selecting date: #{date} for comparison")
+# Grab the trade date from the latest mqp log file if none was passed in
+if date.nil? || date.empty?
+  dates = mqp_log_files(router_name).map { |file| mqp_file_date(file) }
+  log(router_name, "Dates found for mqp files: #{dates}")
+  date = dates.compact.last
+end
+log(router_name, "Using date: #{date} for comparison")
 
 # Now grab all mqp and orm files that match on the date and router name
 mqp_files = mqp_log_files(router_name).select { |file| mqp_file_matches_date?(file, date) }
 orm_files = orm_log_files(router_name).select { |file| orm_file_matches_date?(file, date) }
-exit if mqp_files.empty? || orm_files.empty?
-
-# grab the latest orm file. This script assumes there will only be one file that matches the date and router name
-orm_file = orm_files.last
-if orm_file.nil?
-  log(router_name, "No orm file found for #{date}, exiting")
+if mqp_files.empty? || orm_files.empty?
+  log(router_name, "Not enough mqp:#{mqp_files.count} or orm:#{orm_files.count} files found for date: #{date}, exiting")
   exit
 end
 
 # Lump all the MQP files into one file so we can just walk it (in case of restarts)
 combine_mqp_files(mqp_files, router_name, date)
 
+# Lump all the ORM files into one file so we can just walk it (in case of restarts)
+combine_orm_files(orm_files, router_name, date)
+
 # get all the mqp lines, and all the orm lines that contain JSON
 mqp_lines = IO.readlines(combined_mqp_file_name(router_name, date))
-orm_lines = IO.readlines(File.join(ORM_LOG_FILE_PATH, orm_file)).select { |line| line.include? ORM_LOG_JSON_TAG }
+orm_lines = IO.readlines(combined_orm_file_name(router_name, date)).select { |line| line.include? ORM_LOG_JSON_TAG }
 
 # log some stats
 log(router_name, "mqp lines read from #{combined_mqp_file_name(router_name, date)}: #{mqp_lines.count}")
-log(router_name, "orm lines read from #{File.join(ORM_LOG_FILE_PATH, orm_file)}: #{orm_lines.count}")
+log(router_name, "orm lines read from #{combined_orm_file_name(router_name, date)}: #{orm_lines.count}")
 
-# Extract the JSON payload from each log file
-mqp_lines.each do |line|
-  File.write(mqp_json_file_name(router_name, date), line.partition('"payload":"')[2].partition('","routing_key')[0].gsub('\\', '') + "\n")
+# Extract the JSON payload from each log file, and write it to yet another file strictly for running diff
+File.open(mqp_json_file_name(router_name, date), 'w') do |f|
+  mqp_lines.each do |line|
+    f.puts line.partition('"payload":"')[2].partition('","routing_key')[0].gsub('\\', '')
+  end
 end
-orm_lines.each do |line|
-  File.write(orm_json_file_name(router_name, date), line.partition('JSON|')[2] + "\n")
+File.open(orm_json_file_name(router_name, date), 'w') do |f|
+  orm_lines.each do |line|
+    f.puts line.partition('JSON|')[2]
+  end
 end
 
 # Run linux Diff
 result = system("diff #{mqp_json_file_name(router_name, date)} #{orm_json_file_name(router_name, date)} > #{diff_json_file_name(router_name, date)}")
-log(router, 'JSON is equal, exiting') if result
+log(router_name, 'JSON is equal, exiting') if result
 
 # iterate over file1's json and build an array of json objects
 mqp_file_json = []
